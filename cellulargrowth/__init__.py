@@ -1,0 +1,1 @@
+from cellulargrowth.mimura_model import solve_1D
