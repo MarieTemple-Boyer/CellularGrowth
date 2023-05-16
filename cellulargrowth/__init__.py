@@ -1,1 +1,2 @@
-from cellulargrowth.mimura_model import solve_1D
+from cellulargrowth.mimura_model import solve_1D_explicit
+from cellulargrowth.mimura_model import solve_1D_implicit

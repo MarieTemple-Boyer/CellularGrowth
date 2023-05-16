@@ -8,7 +8,7 @@ setuptools.setup(
     # Name of your Package
     name='cellulargrowth',
     # Project Version
-    version='1.0',
+    version='1.1',
     # Description of your Package
     description='Solve an equation that models cellular development',
     # Website for your Project or Github repo
