@@ -1,2 +1,10 @@
+from cellulargrowth.tools import step_from_array
+from cellulargrowth.tools import encode_tridiagonal_matrix
+
+
 from cellulargrowth.mimura_model import solve_1D_explicit
 from cellulargrowth.mimura_model import solve_1D_implicit
+
+from cellulargrowth.long_time import solve_1D_long_time
+
+from cellulargrowth.cellulargrowth_ import CellularGrowth
