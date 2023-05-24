@@ -35,7 +35,7 @@ def solve_1D_explicit(bacteria0: np.ndarray,
     >>> bac, nut = solve_1D_explicit(bacteria0, nutrient0, time, space)
     >>> n, i = 10, 25
     >>> # at time time[n] at the postion space[i] the density of bacteria is
-    >>> print(bac[n,i])
+    >>> bac[n,i]
     0.05434032732745466
     >>> bac, nut = solve_1D_explicit(bacteria0=np.ones(5),
     ...                              nutrient0=np.ones(5),
@@ -100,7 +100,7 @@ def solve_1D_implicit(bacteria0: np.ndarray,
     >>> bacteria0 = np.exp(-space**2/2)
     >>> nutrient0 = np.ones(len(space))
     >>> bac, nut = solve_1D_implicit(bacteria0, nutrient0, time, space, epsilon=0.1)
-    >>> print(bac[10,25])
+    >>> bac[10,25]
     0.054666616059249024
     >>> bac, nut = solve_1D_implicit(bacteria0=np.ones(5),
     ...                              nutrient0=np.ones(5),
