@@ -8,6 +8,8 @@ import numpy as np
 from cellulargrowth import step_from_array
 from cellulargrowth import encode_tridiagonal_matrix
 
+import math
+
 SMALL = 0.0001
 
 
@@ -191,7 +193,7 @@ class CellularGrowth:
         ...                                             dt=0.04,
         ...                                             space0=space0)
         >>> bac[10, 48]
-        0.6949000892936333
+        0.6949000893450669
         >>> bac, nut = model_sym.solve_long_time(time_max=2,
         ...                                      dt=0.04,
         ...                                      space0=np.array([0, 0.1, 0.2, 1]))
@@ -213,10 +215,6 @@ class CellularGrowth:
         bac[0] = self.bacteria0(space0)
         nut[0] = self.nutrient0(space0)
 
-        if np.abs(bac[0][0]) > SMALL or np.abs(bac[0][-1]) > SMALL:
-            warnings.warn(
-                'The density of the initial bacteria should be very small on the   edage.')
-
         code_bac, code_nut = self._matrices_for_solve_implicit(
             dt, dx, space0, symetric=False)
 
@@ -225,17 +223,18 @@ class CellularGrowth:
                 / np.sum((space[n] >= 0) * bac[n])
             mean_space = (space[n][-1] + space[n][0])/2
             it_dif = round((mean_bac-mean_space)/dx)
+            omega = 2*np.sqrt(self.nutrient0([math.inf])[0]-self.mu)
             if it_dif > 0:
                 space[n] = space[n]+it_dif*dx
-                # TO DO:  find a good way to give a value on the boundary
                 bac[n] = np.concatenate((
                     bac[n][it_dif:],
-                    self.bacteria0(space[n][-it_dif:])))
+                    bac[n][-1]
+                    * np.power(1-dx*omega/(2*self.epsilon), np.arange(1, it_dif+1))
+                ))
                 nut[n] = np.concatenate((
                     nut[n][it_dif:],
-                    self.nutrient0(space[n][-it_dif:])))
+                    self.nutrient0([math.inf])[0]*np.ones(it_dif)))
             space[n+1] = space[n]
-
             bac[n+1] = solve_banded((1, 1),
                                     code_bac,
                                     (1 + dt/self.epsilon*(nut[n]-self.mu)) * bac[n])
@@ -265,6 +264,11 @@ if __name__ == '__main__':
                                    nutrient0=nut0,
                                    mu=0.5,
                                    epsilon=1)
+
+    model_sym2 = CellularGrowth(lambda space: bac0(space, offset=0),
+                                nutrient0=nut0,
+                                mu=0.5,
+                                epsilon=0.1)
 
     import doctest
     doctest.testmod()
