@@ -8,7 +8,7 @@ setuptools.setup(
     # Name of your Package
     name='cellulargrowth',
     # Project Version
-    version='2.0',
+    version='2.1',
     # Description of your Package
     description='Solve an equation that models cellular development',
     # Website for your Project or Github repo
@@ -20,7 +20,7 @@ setuptools.setup(
     # Projects you want to include in your Package
     packages=setuptools.find_packages(),
     # Dependencies/Other modules required for your package to work
-    install_requires=['numpy'],
+    install_requires=['numpy', 'scipy.linalg', 'typing', 'math'],
     # Detailed description of your package
     long_description='This module solve the equation found in the article \
                       from Perthame and Jabin (2022) with a diffusion of the nutrients.',

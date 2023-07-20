@@ -1,6 +1,6 @@
 ''' Class for the modelisation of cellular growth '''
 
-import warnings
+import math
 from typing import Callable
 from scipy.linalg import solve_banded
 import numpy as np
@@ -8,7 +8,6 @@ import numpy as np
 from cellulargrowth import step_from_array
 from cellulargrowth import encode_tridiagonal_matrix
 
-import math
 
 SMALL = 0.0001
 
@@ -43,6 +42,14 @@ class CellularGrowth:
         self.bacteria0 = bacteria0
         self.nutrient0 = nutrient0
 
+    def omega(self) -> float:
+        ''' Return the theoric propagation speed of the solution.
+        >>> model_sym.omega()
+        1.4142135623730951
+        '''
+
+        return 2*np.sqrt(self.nutrient0([math.inf])[0]-self.mu)
+
     def _symetric(self) -> bool:
         ''' Check if the initial conditions are symetric function.
         >>> model_sym._symetric()
@@ -76,7 +83,7 @@ class CellularGrowth:
                              [np.average(space[1:]-space[:-1])]))
 
         if np.max(dt)/(np.min(dx)**2) >= 1/2:
-            warnings.warn('The stability condition dt/(dx**2) < 1/2 should be verified.'
+            raise ValueError('The stability condition dt/(dx**2) < 1/2 should be verified.'
                           f'Yet we have dt/(dx**2) = {np.max(dt)/(np.min(dx)**2)} at some points.')
 
         bac = np.zeros((len(time), len(space)))
@@ -109,17 +116,19 @@ class CellularGrowth:
                                      dt: float,
                                      dx: float,
                                      space: np.ndarray,
-                                     symetric: bool) -> np.ndarray:
+                                     symetric: bool = False,
+                                     long_time: bool = False) -> np.ndarray:
         ''' Return the encoded matrices to solve the PDE with implicit finite difference scheme.'''
 
         coeff = dt/(dx**2)
-        ones = np.ones(len(space)-1)
+        len_mat = len(space)
+        ones = np.ones(len_mat-1)
 
-        mat_bac = (1+2*self.epsilon*coeff) * np.eye(len(space)) \
+        mat_bac = (1+2*self.epsilon*coeff) * np.eye(len_mat) \
             - self.epsilon*coeff * np.diag(ones, 1) \
             - self.epsilon*coeff * np.diag(ones, -1)
 
-        mat_nut = (1+2*coeff) * np.eye(len(space)) \
+        mat_nut = (1+2*coeff) * np.eye(len_mat) \
             - coeff * np.diag(ones, 1) \
             - coeff * np.diag(ones, -1)
         if symetric and space[0] == 0:
@@ -130,9 +139,15 @@ class CellularGrowth:
             # Neumann boundary conditions
             mat_bac[0, 0] += -self.epsilon*coeff
             mat_nut[0, 0] += -coeff
-        # Neumann boundary conditions
-        mat_bac[-1, -1] += -self.epsilon*coeff
-        mat_nut[-1, -1] += -coeff
+
+        if not long_time:
+            # Neumann boundary conditions
+            mat_bac[-1, -1] += -self.epsilon*coeff
+            mat_nut[-1, -1] += -coeff
+        else:
+            mat_bac[-1, -1] -= self.epsilon*coeff * \
+                (1-dx*self.omega()/(2*self.epsilon))
+            mat_nut[-1, -1] -= coeff
 
         code_bac = encode_tridiagonal_matrix(mat_bac)
         code_nut = encode_tridiagonal_matrix(mat_nut)
@@ -189,17 +204,11 @@ class CellularGrowth:
                         space0: np.ndarray) -> np.ndarray | np.ndarray | np.ndarray:
         '''
         >>> space0 = np.arange(-5, 5+0.1, 0.1)
-        >>> space, bac, nut = model_sym.solve_long_time(time_max=2,
-        ...                                             dt=0.04,
-        ...                                             space0=space0)
+        >>> space, bac, nut = model_sym2.solve_long_time(time_max=2,
+        ...                                              dt=0.04,
+        ...                                              space0=space0)
         >>> bac[10, 48]
-        0.6949000893450669
-        >>> bac, nut = model_sym.solve_long_time(time_max=2,
-        ...                                      dt=0.04,
-        ...                                      space0=np.array([0, 0.1, 0.2, 1]))
-        Traceback (most recent call last):
-            ...
-        ValueError: The space discretisation has to be uniform
+        2.395638488175865
         '''
 
         dx = step_from_array(space0, 'space')
@@ -207,33 +216,25 @@ class CellularGrowth:
         nb_it_time = int(time_max/dt)+1
 
         space = np.zeros((nb_it_time, len(space0)))
-        space[0] = space0
 
         bac = np.zeros((nb_it_time, len(space0)))
         nut = np.zeros((nb_it_time, len(space0)))
 
-        bac[0] = self.bacteria0(space0)
-        nut[0] = self.nutrient0(space0)
-
         code_bac, code_nut = self._matrices_for_solve_implicit(
-            dt, dx, space0, symetric=False)
+            dt, dx, space0, long_time=True)
+
+        # initialisation
+        mean_bac = np.sum((space0 >= 0) * self.bacteria0(space0)*space0) \
+            / np.sum((space0 >= 0) * self.bacteria0(space))
+        mean_space = (space0[-1] + space0[0])/2
+        it_dif = round((mean_bac-mean_space)/dx)
+
+        space[0] = space0 + it_dif*dx
+        bac[0] = self.bacteria0(space[0])
+        nut[0] = self.nutrient0(space[0])
 
         for n in range(0, nb_it_time-1):
-            mean_bac = np.sum((space[n] >= 0) * bac[n]*space[n]) \
-                / np.sum((space[n] >= 0) * bac[n])
-            mean_space = (space[n][-1] + space[n][0])/2
-            it_dif = round((mean_bac-mean_space)/dx)
-            omega = 2*np.sqrt(self.nutrient0([math.inf])[0]-self.mu)
-            if it_dif > 0:
-                space[n] = space[n]+it_dif*dx
-                bac[n] = np.concatenate((
-                    bac[n][it_dif:],
-                    bac[n][-1]
-                    * np.power(1-dx*omega/(2*self.epsilon), np.arange(1, it_dif+1))
-                ))
-                nut[n] = np.concatenate((
-                    nut[n][it_dif:],
-                    self.nutrient0([math.inf])[0]*np.ones(it_dif)))
+            # resolution of the linear system
             space[n+1] = space[n]
             bac[n+1] = solve_banded((1, 1),
                                     code_bac,
@@ -242,12 +243,28 @@ class CellularGrowth:
                                     code_nut,
                                     (1 - dt*bac[n]) * nut[n])
 
+            # adaptation of the window
+            mean_bac = np.sum((space[n+1] >= 0) * bac[n+1]*space[n+1]) \
+                / np.sum((space[n+1] >= 0) * bac[n+1])
+            mean_space = (space[n+1][-1] + space[n+1][0])/2
+            it_dif = round((mean_bac-mean_space)/dx)
+            if it_dif > 0:
+                space[n+1] = space[n+1]+it_dif*dx
+                bac[n+1] = np.concatenate((
+                    bac[n+1][it_dif:],
+                    bac[n+1][-1]
+                    * np.power(1-dx*self.omega()/(2*self.epsilon), np.arange(1, it_dif+1))
+                ))
+                nut[n+1] = np.concatenate((
+                    nut[n+1][it_dif:],
+                    self.nutrient0([math.inf])[0]*np.ones(it_dif)))
+
         return space, bac, nut
 
 
 if __name__ == '__main__':
 
-    def bac0(space, offset):
+    def bac0(space, offset=0):
         ''' Initial density of becteria '''
         return np.exp(-(space-offset)**2/2)
 
@@ -255,17 +272,17 @@ if __name__ == '__main__':
         ''' Initial density of nutrient '''
         return np.ones(len(space))
 
-    model_sym = CellularGrowth(lambda space: bac0(space, offset=0),
+    model_sym = CellularGrowth(lambda space: bac0(space, offset=0.),
                                nutrient0=nut0,
                                mu=0.5,
                                epsilon=1)
 
-    model_non_sym = CellularGrowth(lambda space: bac0(space, offset=1),
+    model_non_sym = CellularGrowth(lambda space: bac0(space, offset=1.),
                                    nutrient0=nut0,
                                    mu=0.5,
                                    epsilon=1)
 
-    model_sym2 = CellularGrowth(lambda space: bac0(space, offset=0),
+    model_sym2 = CellularGrowth(lambda space: bac0(space, offset=0.),
                                 nutrient0=nut0,
                                 mu=0.5,
                                 epsilon=0.1)
